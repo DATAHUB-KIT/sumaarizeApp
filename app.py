@@ -5,13 +5,20 @@ from pypdf import PdfReader
 import os
 from dotenv import load_dotenv
 
+import streamlit as st
+from google import genai
+
+API_KEY = st.secrets["GEMINI_API_KEY"]
+
+client = genai.Client(api_key=API_KEY)
+
 # Load API key
 load_dotenv()
 
-api_key = os.getenv("GEMINI_API_KEY")
+#GIT api_key = os.getenv("GEMINI_API_KEY")
 
 # Gemini client
-client = genai.Client(api_key=api_key)
+#client = genai.Client(api_key=api_key)
 
 # Streamlit UI
 st.title(" Document Summarizer using Gemini")
