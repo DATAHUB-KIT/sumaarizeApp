@@ -1,30 +1,44 @@
-#pip install streamlit google-genai pypdf python-dotenv
+
 import streamlit as st
 from google import genai
 from pypdf import PdfReader
-import os
-from dotenv import load_dotenv
+from io import BytesIO
 
-import streamlit as st
-from google import genai
+# -------------------------------
+# Streamlit page configuration
+# -------------------------------
+st.set_page_config(
+    page_title="Gemini Document Summarizer",
+    page_icon="📄",
+    layout="wide"
+)
 
-API_KEY = st.secrets["GEMINI_API_KEY"]
+st.title("📄 Document Summarizer using Gemini")
+st.write("Upload a PDF or TXT document and generate a summary using Gemini.")
 
-client = genai.Client(api_key=API_KEY)
+# -------------------------------
+# Load API key from Streamlit Secrets
+# -------------------------------
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
 
-# Load API key
-load_dotenv()
+    if not api_key:
+        st.error("GEMINI_API_KEY is empty in Streamlit Secrets.")
+        st.stop()
 
-#GIT api_key = os.getenv("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key)
 
-# Gemini client
-#client = genai.Client(api_key=api_key)
+except Exception as e:
+    st.error(
+        "Could not initialize Gemini. "
+        "Check your Streamlit Secrets and installed packages."
+    )
+    st.code(str(e))
+    st.stop()
 
-# Streamlit UI
-st.title(" Document Summarizer using Gemini")
-
-st.write("Upload a PDF or TXT document and Gemini will summarize it.")
-
+# -------------------------------
+# Upload document
+# -------------------------------
 uploaded_file = st.file_uploader(
     "Upload your document",
     type=["pdf", "txt"]
@@ -32,51 +46,81 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
 
-    # Extract text
-    if uploaded_file.name.endswith(".pdf"):
+    try:
+        # Extract text from PDF or TXT
+        if uploaded_file.name.lower().endswith(".pdf"):
+            reader = PdfReader(BytesIO(uploaded_file.getvalue()))
 
-        reader = PdfReader(uploaded_file)
+            pages = []
+            for page in reader.pages:
+                pages.append(page.extract_text() or "")
 
-        text = ""
+            document_text = "\n".join(pages)
 
-        for page in reader.pages:
-            text += page.extract_text()
-
-    else:
-        text = uploaded_file.read().decode("utf-8")
-
-    # Display extracted text
-    st.subheader("Extracted Document Text")
-
-    st.text_area(
-        "Document",
-        text,
-        height=250
-    )
-
-    # Summarize button
-    if st.button("Summarize Document"):
-
-        prompt = f"""
-        Summarize the following document.
-
-        Provide:
-        1. Short summary
-        2. Key points
-        3. Important facts
-        4. Main conclusion
-
-        Document:
-        {text}
-        """
-
-        with st.spinner("Gemini is summarizing..."):
-
-            response = client.models.generate_content(
-                model="gemini-3.5-flash-lite",
-                contents=prompt
+        else:
+            document_text = uploaded_file.getvalue().decode(
+                "utf-8-sig",
+                errors="replace"
             )
 
-        st.subheader(" Gemini Summary")
+        if not document_text.strip():
+            st.warning(
+                "No readable text was found. "
+                "If this is a scanned PDF, OCR may be required."
+            )
+            st.stop()
 
-        st.write(response.text)
+        st.success("Document uploaded and text extracted successfully.")
+
+        with st.expander("View extracted document text"):
+            st.text_area(
+                "Extracted text",
+                document_text,
+                height=250
+            )
+
+        # -------------------------------
+        # Summarize document
+        # -------------------------------
+        if st.button("✨ Summarize Document", type="primary"):
+
+            prompt = f"""
+You are an expert document analyst.
+
+Analyze the document below and provide:
+
+1. Short summary
+2. Key points
+3. Important facts and figures
+4. Main conclusion
+
+Use clear headings and bullet points.
+Do not invent facts that are not present in the document.
+
+DOCUMENT:
+{document_text}
+"""
+
+            with st.spinner("Gemini is summarizing your document..."):
+                try:
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt
+                    )
+
+                    if response.text:
+                        st.subheader("📝 Gemini Summary")
+                        st.markdown(response.text)
+                    else:
+                        st.warning(
+                            "Gemini returned an empty response. "
+                            "Try another document."
+                        )
+
+                except Exception as e:
+                    st.error("Gemini could not summarize the document.")
+                    st.code(str(e))
+
+    except Exception as e:
+        st.error("Could not read the uploaded document.")
+        st.code(str(e))
